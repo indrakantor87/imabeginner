@@ -1,0 +1,34 @@
+{
+  "name": "fbs-market-analyzer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "bin": "index.js",
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ]
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "pkg . --targets node18-win-x64 --output ImABeginnerBot_Lite"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@mathieuc/tradingview": "^3.5.2",
+    "axios": "^1.13.5",
+    "chalk": "^4.1.2",
+    "express": "^5.2.1",
+    "localtunnel": "^2.0.2",
+    "socket.io": "^4.8.3",
+    "technicalindicators": "^3.1.0",
+    "xml2js": "^0.6.2",
+    "yahoo-finance2": "^3.13.0"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
+}
