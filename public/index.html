@@ -7,86 +7,149 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap');
         
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; background-color: #020617; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         
         /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
 
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
         .card {
-            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #334155;
-            transition: all 0.2s ease;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
         }
         .card:hover {
-            border-color: #475569;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            border-color: rgba(255, 255, 255, 0.1);
+            background: rgba(30, 41, 59, 0.6);
         }
-        .value-up { color: #34d399; text-shadow: 0 0 10px rgba(52, 211, 153, 0.2); }
-        .value-down { color: #f87171; text-shadow: 0 0 10px rgba(248, 113, 113, 0.2); }
+
+        .value-up { color: #34d399; text-shadow: 0 0 15px rgba(52, 211, 153, 0.15); }
+        .value-down { color: #f87171; text-shadow: 0 0 15px rgba(248, 113, 113, 0.15); }
+        
+        .pulse-dot {
+            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: .5; transform: scale(0.9); }
+        }
+
+        .rsi-bar-bg { background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; overflow: hidden; }
+        .rsi-bar-fill { height: 100%; transition: width 0.5s ease, background-color 0.3s ease; }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
+<body class="h-screen flex flex-col overflow-hidden text-slate-300 bg-[url('https://assets.codepen.io/108082/bg-grid.png')] bg-repeat opacity-95">
 
     <!-- Header -->
-    <header class="bg-slate-900 border-b border-slate-800 p-3 flex justify-between items-center">
-        <div class="flex items-center gap-3">
-            <div class="h-2 w-2 rounded-full bg-green-500" id="connectionStatus"></div>
-            <h1 class="text-lg font-bold text-white">i'm A beginner <span class="text-xs font-normal text-slate-500">v2.1 Lite</span></h1>
-            <span class="text-[10px] text-slate-500 font-mono" id="lastSync">Sync: Wait</span>
+    <header class="glass-panel border-b border-slate-800/50 p-4 flex justify-between items-center z-20 shadow-lg">
+        <div class="flex items-center gap-4">
+            <div class="relative flex items-center justify-center h-8 w-8 rounded-xl bg-slate-800 border border-slate-700 shadow-inner">
+                <div class="h-2.5 w-2.5 rounded-full bg-green-500 pulse-dot" id="connectionStatus"></div>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    SMART<span class="text-indigo-400">BOT</span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-400 font-mono border border-slate-700">PRO v3.0</span>
+                </h1>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-[10px] text-slate-500 font-mono" id="lastSync">Sync: Initializing...</span>
+                </div>
+            </div>
         </div>
         
-        <div class="flex gap-4 text-sm font-mono">
-            <div>Bal: <span class="text-white" id="balance">$0.00</span></div>
-            <div>Eq: <span class="text-blue-400" id="equity">$0.00</span></div>
-            <div id="botMode" class="text-indigo-300">LOADING</div>
+        <div class="flex items-center gap-6">
+            <div class="flex flex-col items-end">
+                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Total Equity</span>
+                <span class="text-xl font-mono font-bold text-white tracking-tight" id="equity">$0.00</span>
+            </div>
+            <div class="h-8 w-px bg-slate-800"></div>
+            <div class="flex flex-col items-end">
+                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Balance</span>
+                <span class="text-sm font-mono text-slate-400" id="balance">$0.00</span>
+            </div>
+            <div class="ml-2">
+                <div id="botMode" class="px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 font-bold text-xs border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.1)]">AUTO</div>
+            </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 flex overflow-hidden">
+    <main class="flex-1 flex overflow-hidden relative">
         
         <!-- Left: Market Grid & Activity -->
-        <div class="flex-1 flex flex-col bg-slate-950">
+        <div class="flex-1 flex flex-col relative z-10">
             <!-- Grid Section -->
-            <div class="p-4 overflow-y-auto custom-scrollbar">
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="marketGrid">
+            <div class="flex-1 p-6 overflow-y-auto custom-scrollbar">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" id="marketGrid">
                     <!-- Cards will be injected here -->
-                    <div class="col-span-full text-center text-slate-600 py-10 text-xs">Initializing...</div>
+                    <div class="col-span-full flex flex-col items-center justify-center h-64 text-slate-600">
+                        <svg class="w-10 h-10 mb-3 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-xs font-mono tracking-widest uppercase">Connecting to MT5 Feed...</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Bottom: Live Activity Console (Fills the void) -->
-            <div class="flex-1 bg-slate-900/30 border-t border-slate-800 p-4 font-mono text-[11px] overflow-hidden flex flex-col">
-                <div class="flex justify-between items-center mb-2">
-                    <h3 class="text-slate-500 font-bold uppercase tracking-wider text-[10px]">Live Market Activity</h3>
-                    <span class="text-slate-600 text-[10px]">Real-time Feed</span>
+            <!-- Bottom: Live Activity Console -->
+            <div class="h-48 glass-panel border-t border-slate-800/50 p-0 flex flex-col backdrop-blur-md">
+                <div class="px-4 py-2 bg-slate-900/40 border-b border-slate-800/50 flex justify-between items-center">
+                    <h3 class="text-indigo-400 font-bold text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Live Activity Log
+                    </h3>
+                    <span class="text-slate-600 text-[10px] font-mono">Real-time Feed</span>
                 </div>
-                <div id="miniLogs" class="flex-1 overflow-y-auto space-y-1 text-slate-400 custom-scrollbar pr-2">
-                    <!-- Logs injected here -->
-                    <div class="text-slate-600 italic">System ready. Waiting for ticks...</div>
+                <div id="miniLogs" class="flex-1 overflow-y-auto p-3 space-y-1.5 font-mono text-[11px] custom-scrollbar">
+                    <div class="text-slate-600 italic pl-2 border-l-2 border-slate-800">System ready. Waiting for market ticks...</div>
                 </div>
             </div>
         </div>
 
-        <!-- Right: Sidebar (Positions Only - No Logs) -->
-        <div class="w-72 bg-slate-900 border-l border-slate-800 flex flex-col shadow-xl z-10">
+        <!-- Right: Sidebar (Positions) -->
+        <div class="w-80 glass-panel border-l border-slate-800/50 flex flex-col shadow-2xl z-20">
             
             <!-- Controls -->
-            <div class="p-2 border-b border-slate-800 flex gap-2">
-                <button onclick="switchMode('SNIPER')" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-[10px] font-bold text-slate-300">SNIPER</button>
-                <button onclick="switchMode('PREDATOR')" class="flex-1 py-1 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 text-red-400 rounded text-[10px] font-bold">PREDATOR</button>
+            <div class="p-4 border-b border-slate-800/50">
+                <h3 class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-3">Manual Override</h3>
+                <div class="flex gap-2">
+                    <button onclick="switchMode('SNIPER')" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[10px] font-bold text-slate-300 transition-all">SNIPER</button>
+                    <button onclick="switchMode('PREDATOR')" class="flex-1 py-2 bg-gradient-to-r from-red-900/40 to-red-800/40 hover:from-red-900/60 border border-red-900/30 text-red-400 rounded-lg text-[10px] font-bold transition-all shadow-[0_0_10px_rgba(220,38,38,0.1)]">PREDATOR</button>
+                </div>
             </div>
 
             <!-- Active Positions -->
-            <div class="flex-1 overflow-y-auto p-2 space-y-2" id="positionsList">
-                <!-- Positions -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <div class="px-4 py-2 bg-slate-900/30 border-b border-slate-800/30 flex justify-between items-center">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Open Positions</span>
+                    <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 rounded font-mono" id="posCount">0</span>
+                </div>
+                <div class="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar" id="positionsList">
+                    <!-- Positions -->
+                </div>
             </div>
         </div>
     </main>
@@ -156,6 +219,10 @@
         });
 
         socket.on('update', (data) => {
+            // Force remove spinner on first update
+            const initMsg = elGrid.querySelector('.col-span-full');
+            if(initMsg) initMsg.remove();
+
             // Safety: Only update card if this is a PAIR update
             if (data.pair) {
                 updateCard(data);
@@ -177,6 +244,12 @@
         socket.on('account_update', (data) => {
             updateAccount(data.account);
             if(data.lastSync) updateSyncStatus(data.lastSync);
+        });
+
+        // NEW: Dedicated Balance Listener
+        socket.on('balance_update', (data) => {
+            if(data.balance !== undefined) elBalance.innerText = `$${parseFloat(data.balance).toFixed(2)}`;
+            if(data.equity !== undefined) elEquity.innerText = `$${parseFloat(data.equity).toFixed(2)}`;
         });
 
         socket.on('price', (data) => {
@@ -227,27 +300,44 @@
             elBalance.innerText = `$${parseFloat(acc.balance).toFixed(2)}`;
             elEquity.innerText = `$${parseFloat(acc.equity).toFixed(2)}`;
             
+            // Update Position Count
+            const elPosCount = document.getElementById('posCount');
+            if(elPosCount) elPosCount.innerText = acc.positions.length;
+
             // Render Positions
             elPositions.innerHTML = '';
             if (acc.positions.length === 0) {
-                elPositions.innerHTML = '<div class="text-center text-slate-600 italic text-xs py-4">No active positions</div>';
+                elPositions.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-32 text-slate-600 space-y-2">
+                        <svg class="w-8 h-8 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                        <span class="text-xs italic">No active positions</span>
+                    </div>`;
             } else {
                 acc.positions.forEach(p => {
                     const div = document.createElement('div');
                     const profit = (typeof p.profit === 'number') ? p.profit : 0;
-                    div.className = 'bg-slate-800 p-2 rounded border-l-4 ' + (p.type === 'BUY' ? 'border-green-500' : 'border-red-500');
+                    const isBuy = p.type === 'BUY';
+                    const isProfit = profit >= 0;
+                    
+                    div.className = `p-3 rounded-lg border transition-all hover:scale-[1.02] ${isBuy ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-rose-900/10 border-rose-500/20'}`;
+                    
                     div.innerHTML = `
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="font-bold text-white">${p.pair.includes(':') ? p.pair.split(':')[1] : p.pair}</span>
-                            <span class="text-xs ${profit >= 0 ? 'text-green-400' : 'text-red-400'} font-mono">${profit >= 0 ? '+' : ''}${profit.toFixed(2)}</span>
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${p.type}</span>
+                                <span class="font-bold text-slate-200 text-sm">${p.pair.includes(':') ? p.pair.split(':')[1] : p.pair}</span>
+                            </div>
+                            <span class="text-xs font-mono font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'}">${isProfit ? '+' : ''}${profit.toFixed(2)}</span>
                         </div>
-                        <div class="flex justify-between text-xs text-slate-400 mb-2">
-                            <span>${p.type} ${p.lot || '?'}</span>
-                            <span>@ ${p.openPrice || '?'}</span>
+                        <div class="flex justify-between items-end">
+                            <div class="text-[10px] text-slate-500 font-mono space-y-0.5">
+                                <div>Lot: <span class="text-slate-300">${p.lot || '?'}</span></div>
+                                <div>@ <span class="text-slate-300">${p.openPrice || '?'}</span></div>
+                            </div>
+                            <button onclick="manualClose('${p.ticket}')" class="text-[9px] bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-2 py-1 rounded border border-slate-700 transition-colors">
+                                CLOSE
+                            </button>
                         </div>
-                        <button onclick="manualClose('${p.ticket}')" class="w-full text-[10px] bg-red-900/50 hover:bg-red-800 text-red-200 py-1 rounded border border-red-800 transition-colors">
-                            CLOSE NOW
-                        </button>
                     `;
                     elPositions.appendChild(div);
                 });
@@ -264,112 +354,134 @@
             const pair = data.pair;
             const safeId = pair.replace(':', '-');
             const simplePair = pair.includes(':') ? pair.split(':')[1] : pair;
-            const provider = pair.includes(':') ? pair.split(':')[0] : 'AUTO';
             
             if (!pairsData[pair]) {
-                // Create Card (Simplified)
+                // Create Card (Redesigned)
                 const card = document.createElement('div');
                 card.id = `card-${safeId}`;
-                card.className = 'card p-3 rounded-lg relative overflow-hidden';
+                card.className = 'card p-4 rounded-xl';
                 card.innerHTML = `
-                    <div class="flex justify-between items-center mb-2">
+                    <!-- Top Row: Name & Price -->
+                    <div class="flex justify-between items-start mb-4">
                         <div>
-                            <h2 class="text-base font-bold text-white">${simplePair}</h2>
-                            <p class="text-[10px] text-slate-400">${provider}</p>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-lg font-bold text-white tracking-tight">${simplePair}</h2>
+                                <span class="text-[9px] px-1.5 rounded bg-slate-700/50 text-slate-400 border border-slate-600/50">M15</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 mt-0.5 font-mono" id="time-${safeId}">--:--:--</div>
                         </div>
                         <div class="text-right">
-                            <div class="text-lg font-mono font-bold text-white price" id="price-${safeId}">
+                            <div class="text-2xl font-mono font-bold text-white tracking-tighter price" id="price-${safeId}">
                                 ${data.price > 0 ? data.price.toFixed(5) : '<span class="text-slate-700">0.00000</span>'}
                             </div>
-                            <div class="text-[10px] text-slate-500 time" id="time-${safeId}">--:--:--</div>
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-2 mb-1">
-                        <div class="bg-slate-900/50 p-1.5 rounded border border-slate-700/50">
-                            <div class="text-[9px] text-slate-500 uppercase">RSI</div>
-                            <div class="font-mono font-bold text-xs rsi" id="rsi-${safeId}">--</div>
+                    <!-- Middle: Visual Indicators -->
+                    <div class="space-y-3 mb-4">
+                        <!-- Signal Badge -->
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/40 border border-slate-800">
+                            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Action</span>
+                            <div class="font-bold text-xs flex items-center gap-1.5" id="signal-badge-${safeId}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                                <span id="signal-${safeId}">WAIT</span>
+                            </div>
                         </div>
-                         <div class="bg-slate-900/50 p-1.5 rounded border border-slate-700/50">
-                            <div class="text-[9px] text-slate-500 uppercase">Signal</div>
-                            <div class="font-bold text-xs signal" id="signal-${safeId}">WAIT</div>
+
+                        <!-- RSI Bar -->
+                        <div>
+                            <div class="flex justify-between text-[10px] mb-1">
+                                <span class="text-slate-500 font-bold">RSI</span>
+                                <span class="font-mono text-slate-300" id="rsi-val-${safeId}">--</span>
+                            </div>
+                            <div class="rsi-bar-bg relative">
+                                <div class="absolute left-[30%] top-0 bottom-0 w-px bg-slate-600/30 z-10"></div>
+                                <div class="absolute left-[70%] top-0 bottom-0 w-px bg-slate-600/30 z-10"></div>
+                                <div class="rsi-bar-fill bg-slate-500 w-0" id="rsi-bar-${safeId}"></div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="flex justify-between text-[10px] text-slate-400 mb-0.5" id="levels-${safeId}">
-                        <span id="vsl-${safeId}" class="font-mono">VSL: -</span>
-                        <span id="tp-${safeId}" class="font-mono text-slate-300">TP: -</span>
+                    <!-- Bottom: Reason & Stats -->
+                    <div class="pt-3 border-t border-slate-700/30">
+                        <div class="text-[10px] text-slate-400 truncate leading-relaxed" id="reason-${safeId}">
+                            Initializing analysis...
+                        </div>
+                        <div class="flex justify-between mt-2 text-[9px] font-mono text-slate-500">
+                            <span id="vsl-${safeId}">VSL: -</span>
+                            <span id="tp-${safeId}">TP: -</span>
+                        </div>
                     </div>
-                    <div class="text-[10px] text-slate-400 truncate reason" id="reason-${safeId}">Standby</div>
-                    <div class="text-[10px] text-amber-400 truncate mt-0.5" id="close-${safeId}"></div>
                 `;
                 
                 const initMsg = elGrid.querySelector('.text-center');
-                if(initMsg) initMsg.remove();
+                if(initMsg) initMsg.parentElement.remove(); // Remove spinner container
 
                 elGrid.appendChild(card);
                 pairsData[pair] = true;
 
-                // Cache elements immediately
+                // Cache elements
                 domCache[pair] = {
                     card: card,
                     price: document.getElementById(`price-${safeId}`),
                     time: document.getElementById(`time-${safeId}`),
-                    rsi: document.getElementById(`rsi-${safeId}`),
+                    rsiVal: document.getElementById(`rsi-val-${safeId}`),
+                    rsiBar: document.getElementById(`rsi-bar-${safeId}`),
                     signal: document.getElementById(`signal-${safeId}`),
+                    signalBadge: document.getElementById(`signal-badge-${safeId}`),
                     reason: document.getElementById(`reason-${safeId}`),
                     vsl: document.getElementById(`vsl-${safeId}`),
-                    tp: document.getElementById(`tp-${safeId}`),
-                    close: document.getElementById(`close-${safeId}`)
+                    tp: document.getElementById(`tp-${safeId}`)
                 };
             }
 
             // Use Cache
             const els = domCache[pair];
-            if(!els) return; // Should not happen
+            if(!els) return;
 
-            // Update RSI Color
-            els.rsi.innerText = data.rsi.toFixed(2);
-            els.rsi.className = 'font-mono font-bold text-sm rsi ' + (data.rsi > 70 ? 'text-red-400' : data.rsi < 30 ? 'text-green-400' : 'text-slate-300');
+            // Update RSI Visuals
+            const rsi = data.rsi;
+            els.rsiVal.innerText = rsi.toFixed(1);
+            els.rsiBar.style.width = `${Math.min(Math.max(rsi, 0), 100)}%`;
+            
+            // RSI Color Logic
+            let rsiColor = 'bg-slate-500';
+            if (rsi > 70) rsiColor = 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]';
+            else if (rsi < 30) rsiColor = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
+            else if (rsi > 55) rsiColor = 'bg-rose-400/50';
+            else if (rsi < 45) rsiColor = 'bg-emerald-400/50';
+            
+            els.rsiBar.className = `rsi-bar-fill ${rsiColor}`;
 
             // Update Signal Badge
-            els.signal.innerText = data.signal;
             if (data.signal === 'BUY') {
-                els.signal.className = 'font-bold text-sm signal text-green-400';
-                els.card.style.borderColor = '#059669';
+                els.signal.innerText = 'STRONG BUY';
+                els.signal.className = 'text-emerald-400';
+                els.signalBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> <span class="text-emerald-400">BUY</span>`;
+                els.card.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+                els.card.style.background = 'rgba(6, 78, 59, 0.2)';
             } else if (data.signal === 'SELL') {
-                els.signal.className = 'font-bold text-sm signal text-red-400';
-                els.card.style.borderColor = '#dc2626';
+                els.signal.innerText = 'STRONG SELL';
+                els.signal.className = 'text-rose-400';
+                els.signalBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> <span class="text-rose-400">SELL</span>`;
+                els.card.style.borderColor = 'rgba(244, 63, 94, 0.3)';
+                els.card.style.background = 'rgba(136, 19, 55, 0.2)';
             } else {
-                els.signal.className = 'font-bold text-sm signal text-slate-400';
-                els.card.style.borderColor = '';
+                els.signal.innerText = 'WAIT';
+                els.signal.className = 'text-slate-400';
+                els.signalBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> <span class="text-slate-500">WAIT</span>`;
+                els.card.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                els.card.style.background = 'rgba(30, 41, 59, 0.4)';
             }
 
-            els.reason.innerText = data.reason || 'Scanning...';
+            // Reason
+            els.reason.innerText = data.reason || 'Analyzing market structure...';
+            if (data.reason && data.reason.includes('Wait')) els.reason.className = 'text-[10px] text-slate-500 truncate';
+            else els.reason.className = 'text-[10px] text-slate-300 truncate';
 
-            if (els.vsl) {
-                if (typeof data.virtualSL === 'number') {
-                    els.vsl.innerText = `VSL: ${data.virtualSL.toFixed(5)}`;
-                } else {
-                    els.vsl.innerText = 'VSL: -';
-                }
-            }
-
-            if (els.tp) {
-                if (typeof data.tp === 'number' && data.tp > 0) {
-                    els.tp.innerText = `TP: ${data.tp.toFixed(5)}`;
-                } else {
-                    els.tp.innerText = 'TP: -';
-                }
-            }
-
-            if (els.close) {
-                if (data.lastCloseReason) {
-                    els.close.innerText = `Last Close: ${data.lastCloseReason}`;
-                } else {
-                    els.close.innerText = '';
-                }
-            }
+            // Levels
+            if (els.vsl) els.vsl.innerText = (typeof data.virtualSL === 'number') ? `VSL: ${data.virtualSL.toFixed(5)}` : 'VSL: -';
+            if (els.tp) els.tp.innerText = (typeof data.tp === 'number' && data.tp > 0) ? `TP: ${data.tp.toFixed(5)}` : 'TP: -';
         }
 
         function updatePrice(data) {

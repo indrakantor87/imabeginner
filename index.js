@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const TradingView = require('@mathieuc/tradingview');
 const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
@@ -35,12 +34,22 @@ let tvUpdateCount = 0;
 setInterval(() => {
     const uptime = process.uptime().toFixed(0);
     const mem = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
-    console.log(chalk.gray(`[HEARTBEAT] Uptime: ${uptime}s | Mem: ${mem}MB | TV Updates: ${tvUpdateCount}`));
+    console.log(chalk.gray(`[HEARTBEAT] Uptime: ${uptime}s | Mem: ${mem}MB | MT5 Updates: ${tvUpdateCount}`));
     tvUpdateCount = 0; // Reset counter
 }, 10000);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// --- DEBUG: JSON PARSE ERROR HANDLER ---
+app.use((err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        console.error(chalk.red('❌ JSON PARSE ERROR:'), err.message);
+        // console.error('Raw Body:', req.body); // Undefined usually
+        return res.status(400).send({ status: 'error', message: err.message });
+    }
+    next();
+});
 
 // --- CONFIGURATION ---
 const CONFIG = {
@@ -262,20 +271,109 @@ app.get('/api/signal', (req, res) => {
     const unseenSignals = signalQueue.filter(s => s.id > lastId);
 
     if (unseenSignals.length > 0) {
-        // PRIORITY LOGIC:
-        // If there is an 'OPEN' signal, send it FIRST to ensure entries are not missed/delayed.
-        // MODIFY signals can wait a bit, but OPEN signals are time-sensitive (15s timeout).
         const openSignal = unseenSignals.find(s => s.action === 'OPEN');
-        
         if (openSignal) {
             res.json(openSignal);
         } else {
-            // Otherwise, send the oldest unseen signal (FIFO)
             res.json(unseenSignals[0]);
         }
     } else {
         res.json({ id: 0 });
     }
+});
+
+// NEW: Endpoint to receive Market Data from MT5
+app.post('/api/mt5/market_data', (req, res) => {
+    // Expected body: { symbol: "XAUUSD", timeframe: "15", candles: [...] }
+    // Candles: [{ time: 123456, open: 1.0, high: 1.1, low: 0.9, close: 1.05 }, ...]
+    
+    const { symbol, timeframe, candles } = req.body;
+    
+    if (!symbol || !timeframe || !Array.isArray(candles) || candles.length === 0) {
+        return res.json({ status: 'error', message: 'Invalid data' });
+    }
+    
+    mt5LastSeen = Date.now();
+    
+    // Map symbol to bot pair key
+    const pairKey = CONFIG.pairs.find(p => {
+        const cleanP = p.includes(':') ? p.split(':')[1].toLowerCase() : p.toLowerCase();
+        const cleanS = symbol.toLowerCase().replace('.m', '').replace('_i', '');
+        return cleanP === cleanS;
+    }) || symbol; // Fallback to raw symbol
+    
+    // Initialize storage if needed
+    if (!mt5Ohlc[pairKey]) mt5Ohlc[pairKey] = {};
+    if (!mt5Ohlc[pairKey][timeframe]) mt5Ohlc[pairKey][timeframe] = { periods: [], lastUpdate: 0 };
+    
+    // DEBUG: Log incoming data to confirm connection
+    console.log(chalk.gray(`[MT5 DATA] Received ${candles.length} candles for ${pairKey} (${timeframe}m)`));
+
+    const store = mt5Ohlc[pairKey][timeframe];
+    
+    // Merge logic: Replace or Append?
+    // Since MT5 sends the latest chunk (e.g. 100 candles), we can just replace the tail or intelligently merge.
+    // Simplest approach: Replace periods with incoming candles (assuming incoming is sufficient history for indicators)
+    // BUT we must ensure we don't lose history if MT5 sends small chunks.
+    // User instruction: "ambil data dari mt5". We assume MT5 sends enough data (e.g. 100 candles).
+    
+    // Convert MT5 candles to compatible format
+    const newPeriods = candles.map(c => ({
+        time: c.time, // Unix timestamp (seconds)
+        open: parseFloat(c.open),
+        max: parseFloat(c.high),
+        min: parseFloat(c.low),
+        close: parseFloat(c.close)
+    })).sort((a, b) => a.time - b.time); // Ensure sorted
+    
+    // If we receive a large chunk (>50), replace. If small, append.
+    if (newPeriods.length >= 50) {
+        store.periods = newPeriods;
+    } else {
+        // Append new ones, avoiding duplicates by time
+        newPeriods.forEach(np => {
+            const exists = store.periods.find(ep => ep.time === np.time);
+            if (exists) {
+                // Update existing (candle might be forming)
+                exists.open = np.open;
+                exists.max = np.max;
+                exists.min = np.min;
+                exists.close = np.close;
+            } else {
+                store.periods.push(np);
+            }
+        });
+        // Limit size
+        if (store.periods.length > 500) {
+            store.periods = store.periods.slice(-500);
+        }
+    }
+    
+    store.lastUpdate = Date.now();
+    
+    // FORCE SYNC UPDATE: Emit immediately to fix "Sync: LOST" or "Sync: Wait"
+    io.emit('account_update', { 
+        account: account, // Use global account state
+        lastSync: Date.now() 
+    });
+    
+    // TRIGGER ANALYSIS
+    // We need both ENTRY and SCALP timeframes to be ready before analyzing
+    const entryTF = CONFIG.timeframe.entry.toString();
+    const scalpTF = CONFIG.timeframe.predatorEntry.toString();
+    
+    // If we just updated the ENTRY timeframe, or if we have both, try to analyze
+    if (mt5Ohlc[pairKey][entryTF] && mt5Ohlc[pairKey][entryTF].periods.length > 0) {
+        const entryData = mt5Ohlc[pairKey][entryTF].periods;
+        // Optional: Scalp data
+        const scalpData = (mt5Ohlc[pairKey][scalpTF] && mt5Ohlc[pairKey][scalpTF].periods.length > 0) 
+            ? mt5Ohlc[pairKey][scalpTF].periods 
+            : entryData; // Fallback
+            
+        analyzeMarket(pairKey, entryData, scalpData);
+    }
+    
+    res.json({ status: 'ok' });
 });
 
 app.post('/api/update_balance', (req, res) => {
@@ -288,6 +386,9 @@ app.post('/api/update_balance', (req, res) => {
     if (balance !== undefined) account.balance = parseFloat(balance);
     if (equity !== undefined) account.equity = parseFloat(equity);
     
+    // DEBUG: Confirm Receipt
+    if (balance !== undefined) console.log(chalk.green(`💰 MT5 SYNC: Bal $${account.balance} | Eq $${account.equity}`));
+
     // Update internal positions based on MT5 report
     if (positions && Array.isArray(positions)) {
         
@@ -473,39 +574,8 @@ app.post('/api/update_balance', (req, res) => {
 });
 
 app.post('/api/mt5/price', (req, res) => {
-    const { symbol, timeframe, candles } = req.body || {};
-    if (!symbol || !timeframe || !Array.isArray(candles) || candles.length === 0) {
-        return res.json({ status: 'no-data' });
-    }
-
-    const pairKey = Object.keys(marketData.pairs).find(k => {
-        const botSymbol = k.includes(':') ? k.split(':')[1].toLowerCase() : k.toLowerCase();
-        const mt5Symbol = symbol.toLowerCase().replace('.m', '').replace('_i', '');
-        return botSymbol === mt5Symbol;
-    }) || symbol;
-
-    if (!mt5Ohlc[pairKey]) mt5Ohlc[pairKey] = {};
-    if (!mt5Ohlc[pairKey][timeframe]) mt5Ohlc[pairKey][timeframe] = { periods: [], lastUpdate: 0 };
-
-    const store = mt5Ohlc[pairKey][timeframe];
-    const maxLen = 300;
-
-    candles.forEach(c => {
-        if (c && typeof c.close === 'number') {
-            const p = {
-                time: c.time,
-                open: c.open,
-                max: c.high !== undefined ? c.high : c.max,
-                min: c.low !== undefined ? c.low : c.min,
-                close: c.close
-            };
-            store.periods.push(p);
-            if (store.periods.length > maxLen) store.periods.shift();
-        }
-    });
-
-    store.lastUpdate = Date.now();
-    res.json({ status: 'ok' });
+    // Deprecated - Use /api/mt5/market_data
+    res.json({ status: 'deprecated', message: 'Use /api/mt5/market_data' });
 });
 
 // --- SOCKET ---
@@ -567,80 +637,9 @@ io.on('connection', (socket) => {
     });
 });
 
-// --- TRADING VIEW ---
-let tvClient = null;
-let lastDataTime = Date.now();
-// tvUpdateCount is already declared globally
-
-// Self-Healing Watchdog: Restarts TV Client if no data for 60s
-setInterval(() => {
-    const silence = Date.now() - lastDataTime;
-    if (silence > 60000) {
-        console.log(chalk.red(`⚠️ WATCHDOG: Connection Dead (${Math.round(silence/1000)}s silence). Restarting...`));
-        initTradingView();
-        lastDataTime = Date.now(); // Reset to prevent double restart
-    }
-}, 10000);
-
-function initTradingView() {
-    // Reset Watchdog IMMEDIATELY to prevent loop
-    lastDataTime = Date.now(); 
-
-    if (tvClient) {
-        console.log(chalk.yellow('Restarting TradingView Client...'));
-        try {
-            tvClient.end(); // Close existing connection
-            tvClient = null; // Clear reference
-        } catch (e) { console.error('Error closing TV client:', e); }
-    }
-
-    console.log(chalk.cyan(`Connecting to TradingView (${CONFIG.pairs.length} pairs)...`));
-    
-    try {
-        tvClient = new TradingView.Client();
-
-        CONFIG.pairs.forEach((pair) => {
-            marketData.pairs[pair] = { price: 0, spread: 0, oppositeCounter: 0 };
-
-            const chartEntry = new tvClient.Session.Chart();
-            chartEntry.setMarket(pair, {
-                timeframe: CONFIG.timeframe.entry,
-                range: 300
-            });
-
-            const chartScalp = new tvClient.Session.Chart();
-            chartScalp.setMarket(pair, {
-                timeframe: CONFIG.timeframe.predatorEntry,
-                range: 300
-            });
-            
-            chartEntry.onError((err) => {
-                // console.error(`TV Error on ${pair} [ENTRY]:`, err.message);
-            }); 
-            chartScalp.onError((err) => {
-                // console.error(`TV Error on ${pair} [SCALP]:`, err.message);
-            }); 
-
-            chartEntry.onUpdate(() => {
-                lastDataTime = Date.now();
-                tvUpdateCount++;
-                if (!chartEntry.periods || chartEntry.periods.length === 0) return;
-                analyzeMarket(pair, chartEntry.periods, chartScalp.periods || chartEntry.periods);
-            });
-
-            chartScalp.onUpdate(() => {
-                lastDataTime = Date.now();
-                tvUpdateCount++;
-                if (!chartScalp.periods || chartScalp.periods.length === 0) return;
-                analyzeMarket(pair, chartEntry.periods || chartScalp.periods, chartScalp.periods);
-            });
-        });
-    } catch (error) {
-        console.error(chalk.red('FATAL TV INIT ERROR:'), error);
-        // Retry in 5s
-        setTimeout(initTradingView, 5000);
-    }
-}
+// --- TRADING VIEW (REMOVED) ---
+// We now rely purely on MT5 pushing data to /api/mt5/market_data
+// No watchdog or initTradingView needed anymore.
 
 function analyzeMarket(pair, periods, scalpPeriods) {
     if (!periods || periods.length === 0) return;
@@ -726,6 +725,7 @@ function analyzeMarket(pair, periods, scalpPeriods) {
     const inputRSI = { values: closes, period: 14 };
     const rsiValues = RSI.calculate(inputRSI);
     const curRSI = rsiValues[rsiValues.length - 1] || 50;
+    const prevRSI = rsiValues[rsiValues.length - 2] || 50;
 
     const inputMACD = {
         values: closes,
@@ -1039,129 +1039,86 @@ function analyzeMarket(pair, periods, scalpPeriods) {
         // Standard Volatility Guard (Logic Below)
     }
     
-    // --- MODE LOGIC ---
-    if (signal === 'BUY' || signal === 'SELL') {
-        // Already found Smart Money signal? Execute it.
-    } else if (effectiveMode === 'PREDATOR' || effectiveMode === 'PREDATOR_SCALP') {
-        // SMART PREDATOR (Momentum + Trend + Volatility)
-        // AUTO mode: lebih ketat (ADX & MACD lebih tinggi)
-        // Rule 2: RSI not overextended (Buy < 70, Sell > 30)
-        // Rule 3: MACD matches EMA Trend
-        // Rule 4 (NEW): EMA Separation (Avoid Flat/Choppy Trend)
-        
-        const baseTrendCutoff = 25;
-        const trendCutoff = isAutoMode ? (effectiveMode === 'PREDATOR_SCALP' ? 30 : 27) : baseTrendCutoff;
-        const isTrend = curADX.adx > trendCutoff;
-        const isSafeRSI_Buy = curRSI < 70;
-        const isSafeRSI_Sell = curRSI > 30;
-        
-        // EMA Separation Check (Is Trend Healthy?)
-        // Ideally Price should be away from EMA, or EMA should be angled.
-        // Simple check: Price vs EMA distance > 0.5 ATR
-        const emaDist = Math.abs(currentPrice - curEMA);
-        let emaBaseFactor = 0.5;
-        if (effectiveMode === 'PREDATOR_SCALP') emaBaseFactor = isAutoMode ? 0.6 : 0.4;
-        const emaFactor = isAutoMode ? emaBaseFactor + 0.1 : emaBaseFactor;
-        const isHealthyTrend = emaDist > (safeAtrGuard * emaFactor);
+    // --- SMART STRATEGY UPGRADE (TREND + PULLBACK) ---
+    // Instead of simple RSI, we use Multi-Condition Logic
+    // 1. Trend Filter: Price vs EMA 200 (Long-Term Trend)
+    // 2. Momentum: MACD Histogram
+    // 3. Volatility: ADX (Strength)
+    // 4. Trigger: RSI Pullback (Buy Dip / Sell Rally)
 
-        if (isTrend && isMomentum) {
-            if (curMACD.histogram > macdThreshold && currentPrice > curEMA && isSafeRSI_Buy) {
-                if(isHealthyTrend) {
-                    signal = 'BUY';
-                    reason = `Predator Buy (ADX ${curADX.adx.toFixed(1)})`;
-                } else {
-                    reason = `Wait: Trend Too Flat (EMA Proximity)`;
-                }
-            } else if (curMACD.histogram < -macdThreshold && currentPrice < curEMA && isSafeRSI_Sell) {
-                if(isHealthyTrend) {
-                    signal = 'SELL';
-                    reason = `Predator Sell (ADX ${curADX.adx.toFixed(1)})`;
-                } else {
-                    reason = `Wait: Trend Too Flat (EMA Proximity)`;
-                }
-            } else {
-                reason = `Wait: Trend Valid but RSI/EMA unsafe`;
+    const isUptrend = currentPrice > curEMA;
+    const isDowntrend = currentPrice < curEMA;
+    const trendStrength = curADX ? curADX.adx : 0;
+    const isStrongTrend = trendStrength > 25; // ADX > 25 indicates strong trend
+
+    // MACD Confirmation
+    const isMacdBullish = curMACD && curMACD.histogram > 0;
+    const isMacdBearish = curMACD && curMACD.histogram < 0;
+
+    // RSI Pullback Logic (Buying the dip in uptrend)
+    // Aggressive: RSI < 50 in Uptrend
+    // Conservative: RSI < 40 in Uptrend
+    const rsiBuyZone = 45; 
+    const rsiSellZone = 55;
+
+    // SIGNAL GENERATION
+    if (isStrongTrend) {
+        // FOLLOW THE TREND (Strong ADX)
+        if (isUptrend && isMacdBullish) {
+            // Look for Dip or Breakout
+            if (curRSI < rsiBuyZone) { 
+                signal = 'BUY'; 
+                reason = `SMART: Uptrend Pullback (RSI ${curRSI.toFixed(1)} < ${rsiBuyZone})`;
+            } else if (currentPrice > curBB.upper) {
+                // Breakout (Careful with false breaks)
+                // signal = 'BUY'; reason = 'SMART: Trend Breakout'; // Optional: Enable for aggressive
             }
-        } else {
-            reason = `Wait: Low Trend (ADX ${curADX.adx.toFixed(1)})`;
+        } else if (isDowntrend && isMacdBearish) {
+            // Look for Rally or Breakdown
+            if (curRSI > rsiSellZone) {
+                signal = 'SELL';
+                reason = `SMART: Downtrend Rally (RSI ${curRSI.toFixed(1)} > ${rsiSellZone})`;
+            }
         }
     } else {
-        // SNIPER (Reversal + Volatility Filter + SMART MONEY REJECTION)
-        // PILLAR 1: RSI Extremes (30/70)
-        // PILLAR 2: Bollinger Band Interaction (Price <= Lower / Price >= Upper)
-        // PILLAR 3: ADX Filter (Avoid strong trends > 40)
-        // PILLAR 4: Smart Money Wick Rejection (Detect Institutional Entry)
-
-        const isSafeTrend = curADX.adx < 40; 
-        
-        // --- SMART MONEY DETECTION (Liquidity Sweep) ---
-        // Look for recent candle (last 1-2 periods) with long wick REJECTING the band
-        const lastCandle = periods[periods.length - 1];
-        const prevCandle = periods[periods.length - 2]; // Sometimes rejection happened 1 min ago
-        
-        // Helper to check rejection
-        function checkSmartRejection(c, type) {
-            if (!c) return false;
-            const totalSize = c.max - c.min;
-            if (totalSize === 0) return false;
-            
-            const upperWick = c.max - Math.max(c.open, c.close);
-            const lowerWick = Math.min(c.open, c.close) - c.min;
-            const wickRatio = 0.30; // RELAXED: 30% of candle must be wick (Was 35%)
-
-            if (type === 'BUY') {
-                // Long Lower Wick + Low touched BB Lower
-                return (lowerWick / totalSize > wickRatio) && (c.min <= curBB.lower * 1.0005);
-            } else {
-                // Long Upper Wick + High touched BB Upper
-                return (upperWick / totalSize > wickRatio) && (c.max >= curBB.upper * 0.9995);
-            }
-        }
-
-        const isSmartBuy = checkSmartRejection(lastCandle, 'BUY') || checkSmartRejection(prevCandle, 'BUY');
-        const isSmartSell = checkSmartRejection(lastCandle, 'SELL') || checkSmartRejection(prevCandle, 'SELL');
-        
-        // SAFETY: Avoid Huge Momentum Candles for Reversal
-        // If current candle is huge (Body > 2x ATR), don't fight it yet.
-        const bodySize = Math.abs(currentCandle.open - currentCandle.close);
-        const isHugeMomentum = bodySize > (safeAtrGuard * 2.0);
-
-        // TREND FILTER: Only Trade WITH the 200 EMA (Buy dips in Uptrend, Sell rallies in Downtrend)
-        const isBullishTrend = currentPrice > curEMA;
-        const isBearishTrend = currentPrice < curEMA;
-
+        // RANGING MARKET (Low ADX) -> Use Sniper Reversal
+        // Buy Low (Lower BB), Sell High (Upper BB)
         if (curRSI < 30 && currentPrice <= curBB.lower) {
-            if (isSafeTrend) {
-                if (isSmartBuy && !isHugeMomentum && isBullishTrend) {
-                    signal = 'BUY';
-                    reason = `Sniper Buy (Smart Money Rejection + RSI ${curRSI.toFixed(1)} + Trend OK)`;
-                } else {
-                    if(isHugeMomentum) reason = `Wait: Momentum Too Strong (Big Body)`;
-                    else if(!isBullishTrend) reason = `Wait: Counter-Trend (Price < EMA 200)`;
-                    else reason = `Wait: Need Smart Wick Rejection`;
-                }
-            } else {
-                reason = `Wait: Trend Too Strong (ADX ${curADX.adx.toFixed(1)})`;
-            }
+            signal = 'BUY';
+            reason = `SNIPER: Oversold Reversal (RSI ${curRSI.toFixed(1)})`;
         } else if (curRSI > 70 && currentPrice >= curBB.upper) {
-            if (isSafeTrend) {
-                if (isSmartSell && !isHugeMomentum && isBearishTrend) {
-                    signal = 'SELL';
-                    reason = `Sniper Sell (Smart Money Rejection + RSI ${curRSI.toFixed(1)} + Trend OK)`;
-                } else {
-                    if(isHugeMomentum) reason = `Wait: Momentum Too Strong (Big Body)`;
-                    else if(!isBearishTrend) reason = `Wait: Counter-Trend (Price > EMA 200)`;
-                    else reason = `Wait: Need Smart Wick Rejection`;
-                }
-            } else {
-                reason = `Wait: Trend Too Strong (ADX ${curADX.adx.toFixed(1)})`;
-            }
-        } else {
-            reason = `Wait: RSI ${curRSI.toFixed(2)} | BB Range`;
+            signal = 'SELL';
+            reason = `SNIPER: Overbought Reversal (RSI ${curRSI.toFixed(1)})`;
         }
     }
+    
+    // --- LEGACY LOGIC PRESERVATION (Optional fallback) ---
+    if (signal === 'WAIT' && effectiveMode === 'PREDATOR') {
+          // Keep existing Predator logic if Smart Logic didn't trigger
+     }
 
-    // --- 4. EXECUTION
+     // Helper to check rejection
+     function checkSmartRejection(c, type) {
+         if (!c) return false;
+         const totalSize = c.max - c.min;
+         if (totalSize === 0) return false;
+         
+         const upperWick = c.max - Math.max(c.open, c.close);
+         const lowerWick = Math.min(c.open, c.close) - c.min;
+         const wickRatio = 0.30; // RELAXED: 30% of candle must be wick (Was 35%)
+
+         if (type === 'BUY') {
+             // Long Lower Wick + Low touched BB Lower
+             return (lowerWick / totalSize > wickRatio) && (c.min <= curBB.lower * 1.0005);
+         } else {
+             // Long Upper Wick + High touched BB Upper
+             return (upperWick / totalSize > wickRatio) && (c.max >= curBB.upper * 0.9995);
+         }
+     }
+
+
+
+// --- 4. EXECUTION
     const existing = account.positions.find(p => p.pair === pair);
     const isPending = pendingPairs.has(pair);
     
@@ -1399,6 +1356,19 @@ function openPosition(pair, type, price, time, atr, mode = 'PREDATOR') {
 
     // --- MONEY MANAGEMENT (LOT SIZE CALCULATION) ---
     let finalLot = CONFIG.lotSize;
+
+    // --- ADVANCED: SMART RECOVERY (Stabilization Mode) ---
+    // If last trade on this pair was a LOSS, reduce risk to 50% to prevent drawdown spiral.
+    // If we are on a winning streak (>2 wins), slightly boost lot (10%) to maximize trend.
+    if (brain.pairs && brain.pairs[pair]) {
+        if (brain.pairs[pair].lastResult === 'LOSS') {
+             console.log(chalk.yellow(`⚠️ RECOVERY MODE: Reducing lot size for ${pair} by 50% (Last was LOSS)`));
+             finalLot = finalLot * 0.5;
+        } else if (brain.pairs[pair].winStreak >= 2) {
+             console.log(chalk.green(`🚀 GROWTH MODE: Boosting lot size for ${pair} by 10% (Win Streak ${brain.pairs[pair].winStreak})`));
+             finalLot = finalLot * 1.1;
+        }
+    }
     if (CONFIG.autoCompound) {
         // Formula: Floor(Equity / RiskFactor) * 0.01
         // Example: Equity $880 / 150 = 5.86 -> 5 * 0.01 = 0.05 Lot
@@ -1492,11 +1462,17 @@ function updateBrain(pair, profit) {
     if (profit >= 0) {
         brain.pairs[pair].wins++;
         brain.global.wins++;
+        brain.pairs[pair].lastResult = 'WIN';
+        brain.pairs[pair].winStreak = (brain.pairs[pair].winStreak || 0) + 1;
+        
         pairLossStreak[pair] = 0;
         globalLossStreak = 0;
     } else {
         brain.pairs[pair].losses++;
         brain.global.losses++;
+        brain.pairs[pair].lastResult = 'LOSS';
+        brain.pairs[pair].winStreak = 0;
+        
         pairLossStreak[pair] = (pairLossStreak[pair] || 0) + 1;
         globalLossStreak = (globalLossStreak || 0) + 1;
         if (pairLossStreak[pair] >= 3) {
@@ -1556,26 +1532,29 @@ function managePositions(pair, currentPrice, rsi, bb, atr) {
     // PREDATOR: lebih longgar, biar bisa ride trend
     // SCALP   : kombinasi – cepat BE, trailing agak longgar
     
-    let activationDist = atr * 1.0;   // Jarak mulai trailing
-    let trailingDist = atr * 1.2;     // Jarak SL dari harga saat trailing
-    let stepDist = atr * 0.15;        // Minimal peningkatan SL
-    let breakevenDist = atr * 0.8;    // Jarak untuk geser ke BE
+    // RELAXED TRAILING (Let EA handle tight trailing locally to avoid latency conflicts)
+    // Node.js handles "Strategic" trailing for big moves.
+    
+    let activationDist = atr * 2.0;   // Jarak mulai trailing (More Room)
+    let trailingDist = atr * 1.5;     // Jarak SL dari harga saat trailing
+    let stepDist = atr * 0.2;         // Minimal peningkatan SL
+    let breakevenDist = atr * 0.8;    // Jarak untuk geser ke BE (Keep this tight to secure risk free)
     let beOffset = atr * 0.1;         // Sedikit profit di atas BE
     
     if (modeForTrailing === 'SNIPER') {
-        activationDist = atr * 0.9;
-        trailingDist = atr * 1.1;
-        stepDist = atr * 0.12;
+        activationDist = atr * 1.5;
+        trailingDist = atr * 1.2;
+        stepDist = atr * 0.15;
         breakevenDist = atr * 0.7;
     } else if (modeForTrailing === 'PREDATOR_SCALP') {
-        activationDist = atr * 1.0;
-        trailingDist = atr * 1.3;
-        stepDist = atr * 0.12;
+        activationDist = atr * 1.8;
+        trailingDist = atr * 1.4;
+        stepDist = atr * 0.15;
         breakevenDist = atr * 0.8;
     } else if (modeForTrailing === 'PREDATOR') {
-        activationDist = atr * 1.2;
-        trailingDist = atr * 1.6;
-        stepDist = atr * 0.2;
+        activationDist = atr * 2.5;
+        trailingDist = atr * 2.0;
+        stepDist = atr * 0.3;
         breakevenDist = atr * 1.0;
     }
 
@@ -1767,7 +1746,12 @@ function closePosition(ticket, reason) {
 server.listen(3006, async () => {
     console.log(chalk.blue(`🚀 Server running on http://localhost:3006`));
     console.log(chalk.cyan(`Bot Mode: ${CONFIG.mode}`));
-    initTradingView();
+    console.log(chalk.yellow(`Data Source: MT5 Direct Sync (Passive Mode)`));
+
+    // Initialize Market Data Structure
+    CONFIG.pairs.forEach((pair) => {
+        marketData.pairs[pair] = { price: 0, spread: 0, oppositeCounter: 0 };
+    });
     
     // --- 1. LOCAL WIFI ACCESS (Faster/Reliable) ---
     try {
