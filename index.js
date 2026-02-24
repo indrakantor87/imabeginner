@@ -387,10 +387,14 @@ app.post('/api/update_balance', (req, res) => {
     if (equity !== undefined) account.equity = parseFloat(equity);
     
     // DEBUG: Confirm Receipt
-    if (balance !== undefined) console.log(chalk.green(`💰 MT5 SYNC: Bal $${account.balance} | Eq $${account.equity}`));
+    if (balance !== undefined) console.log(chalk.green(`💰 SYNC: Bal $${account.balance} | Eq $${account.equity} | Pos: ${account.positions.length}`));
 
     // Update internal positions based on MT5 report
     if (positions && Array.isArray(positions)) {
+        // Debug: Log first position profit if any
+        if(positions.length > 0) {
+             console.log(chalk.gray(`POS UPDATE: ${positions[0].pair} Profit: ${positions[0].profit}`));
+        }
         
         // Sync Logic: Check which pending pairs are now open
         positions.forEach(p => {

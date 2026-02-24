@@ -99,10 +99,10 @@ void OnTimer()
       GetAndExecuteSignal();
    }
    
-   // 2. FAST SYNC: Send Balance/Profit Update every 1 second (5 * 200ms)
+   // 2. FAST SYNC: Send Balance/Profit Update every 400ms (2 * 200ms)
    static int sync_counter = 0;
    sync_counter++;
-   if(sync_counter >= 5) 
+   if(sync_counter >= 2) 
    {
       SendBalanceInfo();
       sync_counter = 0;
@@ -161,7 +161,7 @@ void SendBalanceInfo()
              double price = positionInfo.PriceOpen();
              double profit = positionInfo.Profit();
              
-             string posJson = StringFormat("{\"ticket\":\"%I64u\",\"pair\":\"%s\",\"type\":\"%s\",\"lot\":%.2f,\"openPrice\":%.5f,\"profit\":%.2f}",
+             string posJson = StringFormat("{\"ticket\":\"%I64u\",\"pair\":\"%s\",\"type\":\"%s\",\"lot\":%.2f,\"openPrice\":%.5f,\"profit\":%.5f}",
                                            ticket, sym, typeStr, vol, price, profit);
              
              json += posJson;

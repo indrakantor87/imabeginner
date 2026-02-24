@@ -327,7 +327,10 @@
                                 <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${p.type}</span>
                                 <span class="font-bold text-slate-200 text-sm">${p.pair.includes(':') ? p.pair.split(':')[1] : p.pair}</span>
                             </div>
-                            <span class="text-xs font-mono font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'}">${isProfit ? '+' : ''}${profit.toFixed(2)}</span>
+                            <div class="flex flex-col items-end">
+                                <span class="text-xs font-mono font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'} transition-all duration-300" id="profit-${p.ticket}">${isProfit ? '+' : ''}${profit.toFixed(2)}</span>
+                                <span class="text-[9px] text-slate-600 animate-pulse">● LIVE</span>
+                            </div>
                         </div>
                         <div class="flex justify-between items-end">
                             <div class="text-[10px] text-slate-500 font-mono space-y-0.5">
