@@ -564,6 +564,11 @@ app.post('/api/update_balance', (req, res) => {
     }
 
     // Emit Update
+    io.emit('account_update', {
+        account: account,
+        lastSync: mt5LastSeen
+    });
+
     io.emit('update', {
         pairs: marketData.pairs,
         account: account,

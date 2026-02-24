@@ -99,19 +99,19 @@ void OnTimer()
       GetAndExecuteSignal();
    }
    
-   // 2. Send Market Data (ALWAYS SEND, even if trading stopped)
-   // This ensures Dashboard stays synced regardless of Equity Protection status
+   // 2. FAST SYNC: Send Balance/Profit Update every 1 second (5 * 200ms)
+   static int sync_counter = 0;
+   sync_counter++;
+   if(sync_counter >= 5) 
+   {
+      SendBalanceInfo();
+      sync_counter = 0;
+   }
    
+   // 3. Send Market Data (Rotational)
    string symbol = pairs[current_pair_idx];
    ENUM_TIMEFRAMES tf = (current_tf_mode == 0) ? PERIOD_M15 : PERIOD_M5;
    string tfStr = (current_tf_mode == 0) ? "15" : "5";
-   
-   // Debug Print (Once per cycle to verify Timer is working)
-   if(current_pair_idx == 0 && current_tf_mode == 0) 
-   {
-      // Also Send Balance Info Periodically
-      SendBalanceInfo();
-   }
    
    SendMarketData(symbol, tf, tfStr);
    
