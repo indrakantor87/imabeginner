@@ -77,6 +77,8 @@ const CONFIG = {
     minAtrFraction: 0.0005,
     maxAtrFraction: 0.0012,
     minAtrEntryFraction: 0.0006,
+    globalLossStreakLimit: 5,
+    globalLossStreakCooldownMinutes: 180,
     tradingHours: {
         start: 0,
         end: 24
@@ -101,6 +103,8 @@ let pendingPairs = new Set(); // Spam Protection
 let lastTradeTime = {}; // Cooldown Timer
 let pairLossStreak = {};
 let pairCooldownUntil = {};
+let globalLossStreak = 0;
+let globalCooldownUntil = 0;
 
 // MT5 Bridge State
 let signalQueue = [];
@@ -237,6 +241,12 @@ if (fs.existsSync(BRAIN_FILE)) {
         }
         if (brain.pairCooldownUntil) {
             pairCooldownUntil = brain.pairCooldownUntil;
+        }
+        if (typeof brain.globalLossStreak === 'number') {
+            globalLossStreak = brain.globalLossStreak;
+        }
+        if (brain.globalCooldownUntil) {
+            globalCooldownUntil = brain.globalCooldownUntil;
         }
     } catch (e) { console.error('Error loading brain:', e); }
 }
@@ -1265,12 +1275,17 @@ function openPosition(pair, type, price, time, atr, mode = 'PREDATOR') {
         stats.dailyDate = todayStr;
         stats.dailyProfit = 0;
     }
-    if (stats.totalProfit <= -CONFIG.maxDailyLoss) {
-        console.log(chalk.red(`BLOCKED: Max Daily Loss Reached ($${stats.totalProfit})`));
+    if (stats.dailyProfit <= -CONFIG.maxDailyLoss) {
+        console.log(chalk.red(`BLOCKED: Max Daily Loss Reached ($${stats.dailyProfit.toFixed(2)})`));
         return;
     }
     if (stats.dailyProfit >= CONFIG.dailyProfitTarget) {
         console.log(chalk.green(`BLOCKED: Daily Profit Target Reached ($${stats.dailyProfit.toFixed(2)})`));
+        return;
+    }
+    if (globalCooldownUntil && Date.now() < globalCooldownUntil) {
+        const minutesLeft = Math.max(1, Math.round((globalCooldownUntil - Date.now()) / 60000));
+        console.log(chalk.red(`BLOCKED: Global Loss Streak Cooldown (${minutesLeft}m remaining)`));
         return;
     }
 
@@ -1478,19 +1493,28 @@ function updateBrain(pair, profit) {
         brain.pairs[pair].wins++;
         brain.global.wins++;
         pairLossStreak[pair] = 0;
+        globalLossStreak = 0;
     } else {
         brain.pairs[pair].losses++;
         brain.global.losses++;
         pairLossStreak[pair] = (pairLossStreak[pair] || 0) + 1;
+        globalLossStreak = (globalLossStreak || 0) + 1;
         if (pairLossStreak[pair] >= 3) {
             const cooldownMs = 60 * 60 * 1000; // 1 hour cooldown
             const until = Date.now() + cooldownMs;
             pairCooldownUntil[pair] = until;
             brain.pairCooldownUntil[pair] = until;
         }
+        if (globalLossStreak >= CONFIG.globalLossStreakLimit) {
+            const gMs = CONFIG.globalLossStreakCooldownMinutes * 60 * 1000;
+            const gUntil = Date.now() + gMs;
+            globalCooldownUntil = gUntil;
+            brain.globalCooldownUntil = gUntil;
+        }
     }
     
     brain.pairLossStreak = pairLossStreak;
+    brain.globalLossStreak = globalLossStreak;
     
     // Update Global Profit
     brain.global.totalProfit += profit;
