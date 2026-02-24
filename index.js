@@ -404,7 +404,8 @@ app.post('/api/update_balance', (req, res) => {
                  // Bot Key: "FOREXCOM:XAUUSD" -> "xauusd"
                  // MT5 Symbol: "XAUUSD.m" -> "xauusd"
                  const botSymbol = k.includes(':') ? k.split(':')[1].toLowerCase() : k.toLowerCase();
-                 const mt5Symbol = p.symbol.toLowerCase().replace('.m', '').replace('_i', '');
+                 const rawSymbol = p.symbol || p.pair || '';
+                 const mt5Symbol = rawSymbol.toLowerCase().replace('.m', '').replace('_i', '');
                  return botSymbol === mt5Symbol;
              });
 
@@ -424,7 +425,7 @@ app.post('/api/update_balance', (req, res) => {
 
         // 1. Get IDs of positions reported by MT5
         const mt5Tickets = new Set(positions.map(p => p.ticket.toString()));
-        const mt5Symbols = new Set(positions.map(p => p.symbol.toLowerCase()));
+        const mt5Symbols = new Set(positions.map(p => (p.symbol || p.pair || '').toLowerCase()));
 
         // 2. Filter existing bot positions
         // Keep positions that are:
@@ -532,10 +533,10 @@ app.post('/api/update_balance', (req, res) => {
                 // We try to match symbol with our CONFIG.pairs
                 const pair = CONFIG.pairs.find(p => {
                     const cleanSymbol = p.includes(':') ? p.split(':')[1].toLowerCase() : p.toLowerCase();
-                    const mt5Symbol = mt5Pos.symbol.toLowerCase();
+                    const mt5Symbol = (mt5Pos.symbol || mt5Pos.pair || '').toLowerCase();
                     // Match "EURUSD" with "EURUSD", "EURUSD.m", "EURUSDpro"
                     return mt5Symbol.includes(cleanSymbol) || cleanSymbol.includes(mt5Symbol);
-                }) || `MT5:${mt5Pos.symbol}`;
+                }) || `MT5:${mt5Pos.symbol || mt5Pos.pair}`;
                 
                 // --- FIX: INHERIT MODE FROM PENDING & CLEANUP DUPLICATES ---
                 let mode = 'MANUAL'; // Default if no pending match
