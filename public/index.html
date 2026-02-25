@@ -3,152 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>i'm A beginner - Bot Dashboard</title>
+    <title>SMART BOT PRO - Cyberpunk Terminal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap');
-        
-        body { font-family: 'Inter', sans-serif; background-color: #020617; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
-        /* Custom Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
-
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700;800&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['"Rajdhani"', 'sans-serif'],
+                    },
+                    colors: {
+                        cyber: {
+                            black: '#030014',
+                            dark: '#0a0a1f',
+                            panel: '#13132b',
+                            primary: '#00f0ff',
+                            secondary: '#7000ff',
+                            success: '#00ff9d',
+                            danger: '#ff0055',
+                            warning: '#ffbe0b'
+                        }
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'scanline': 'scanline 8s linear infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                    },
+                    keyframes: {
+                        scanline: {
+                            '0%': { transform: 'translateY(-100%)' },
+                            '100%': { transform: 'translateY(100%)' }
+                        },
+                        glow: {
+                            '0%': { boxShadow: '0 0 5px rgba(0,240,255,0.2)' },
+                            '100%': { boxShadow: '0 0 20px rgba(0,240,255,0.6), 0 0 10px rgba(0,240,255,0.4)' }
+                        }
+                    }
+                }
+            }
         }
-
-        .card {
-            background: rgba(30, 41, 59, 0.4);
-            backdrop-filter: blur(8px);
+    </script>
+    <style>
+        body { 
+            background-color: #030014; 
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(112, 0, 255, 0.15) 0%, transparent 50%),
+                linear-gradient(0deg, rgba(0,0,0,0.2) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.2) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            color: #e2e8f0;
+        }
+        
+        /* Glassmorphism Cyberpunk Style */
+        .cyber-glass {
+            background: rgba(19, 19, 43, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .cyber-card {
+            background: linear-gradient(145deg, rgba(19, 19, 43, 0.9), rgba(10, 10, 31, 0.95));
             border: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
+            transition: all 0.3s ease;
         }
-        .card::before {
+        .cyber-card:hover {
+            border-color: rgba(0, 240, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        .cyber-card::after {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-        }
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            border-color: rgba(255, 255, 255, 0.1);
-            background: rgba(30, 41, 59, 0.6);
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.5), transparent);
         }
 
-        .value-up { color: #34d399; text-shadow: 0 0 15px rgba(52, 211, 153, 0.15); }
-        .value-down { color: #f87171; text-shadow: 0 0 15px rgba(248, 113, 113, 0.15); }
-        
-        .pulse-dot {
-            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: .5; transform: scale(0.9); }
-        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a1f; }
+        ::-webkit-scrollbar-thumb { background: #1e1e3f; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00f0ff; }
 
-        .rsi-bar-bg { background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; overflow: hidden; }
-        .rsi-bar-fill { height: 100%; transition: width 0.5s ease, background-color 0.3s ease; }
+        .text-glow { text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
+        .text-glow-red { text-shadow: 0 0 10px rgba(255, 0, 85, 0.5); }
+        .text-glow-green { text-shadow: 0 0 10px rgba(0, 255, 157, 0.5); }
+
+        .scan-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 240, 255, 0.02) 51%, transparent 51%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 50;
+        }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden text-slate-300 bg-[url('https://assets.codepen.io/108082/bg-grid.png')] bg-repeat opacity-95">
+<body class="h-screen flex flex-col overflow-hidden font-sans">
+    
+    <div class="scan-overlay"></div>
 
     <!-- Header -->
-    <header class="glass-panel border-b border-slate-800/50 p-4 flex justify-between items-center z-20 shadow-lg">
+    <header class="cyber-glass h-16 px-6 flex justify-between items-center z-40 border-b border-cyber-primary/20">
         <div class="flex items-center gap-4">
-            <div class="relative flex items-center justify-center h-8 w-8 rounded-xl bg-slate-800 border border-slate-700 shadow-inner">
-                <div class="h-2.5 w-2.5 rounded-full bg-green-500 pulse-dot" id="connectionStatus"></div>
+            <div class="relative">
+                <div class="w-3 h-3 bg-cyber-success rounded-full animate-pulse shadow-[0_0_10px_#00ff9d]" id="connectionStatus"></div>
+                <div class="absolute inset-0 bg-cyber-success rounded-full animate-ping opacity-20"></div>
             </div>
             <div>
-                <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    SMART<span class="text-indigo-400">BOT</span>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-400 font-mono border border-slate-700">PRO v3.0</span>
+                <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-1">
+                    SMART<span class="text-cyber-primary text-glow">BOT</span>
+                    <span class="text-[10px] px-2 py-0.5 bg-cyber-secondary/20 border border-cyber-secondary/50 rounded text-cyber-secondary ml-2 font-mono">v4.0.0</span>
                 </h1>
-                <div class="flex items-center gap-2 mt-0.5">
-                    <span class="text-[10px] text-slate-500 font-mono" id="lastSync">Sync: Initializing...</span>
+                <div class="flex items-center gap-2 text-[10px] font-mono text-slate-400">
+                    <span id="lastSync" class="text-cyber-primary">INITIALIZING SYSTEM...</span>
                 </div>
             </div>
         </div>
         
-        <div class="flex items-center gap-6">
-            <div class="flex flex-col items-end">
-                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Total Equity</span>
-                <span class="text-xl font-mono font-bold text-white tracking-tight" id="equity">$0.00</span>
+        <div class="flex items-center gap-8">
+            <div class="text-right">
+                <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Equity</div>
+                <div class="text-2xl font-mono font-bold text-white tracking-tight" id="equity">$0.00</div>
             </div>
             <div class="h-8 w-px bg-slate-800"></div>
-            <div class="flex flex-col items-end">
-                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Balance</span>
-                <span class="text-sm font-mono text-slate-400" id="balance">$0.00</span>
+            <div class="text-right">
+                <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Balance</div>
+                <div class="text-xl font-mono text-cyber-primary/80" id="balance">$0.00</div>
             </div>
-            <div class="ml-2">
-                <div id="botMode" class="px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 font-bold text-xs border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.1)]">AUTO</div>
+            <div class="ml-4">
+                <div id="botMode" class="px-4 py-2 bg-cyber-primary/10 border border-cyber-primary/30 text-cyber-primary font-bold rounded-sm shadow-[0_0_15px_rgba(0,240,255,0.15)] tracking-wider">AUTO</div>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 flex overflow-hidden relative">
+    <main class="flex-1 flex overflow-hidden relative z-10">
         
-        <!-- Left: Market Grid & Activity -->
-        <div class="flex-1 flex flex-col relative z-10">
-            <!-- Grid Section -->
+        <!-- Left: Market Grid -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Grid Container -->
             <div class="flex-1 p-6 overflow-y-auto custom-scrollbar">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" id="marketGrid">
-                    <!-- Cards will be injected here -->
-                    <div class="col-span-full flex flex-col items-center justify-center h-64 text-slate-600">
-                        <svg class="w-10 h-10 mb-3 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span class="text-xs font-mono tracking-widest uppercase">Connecting to MT5 Feed...</span>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="marketGrid">
+                    <!-- Loading State -->
+                    <div class="col-span-full h-64 flex flex-col items-center justify-center text-cyber-primary/50">
+                        <div class="w-16 h-16 border-4 border-cyber-primary/30 border-t-cyber-primary rounded-full animate-spin mb-4"></div>
+                        <span class="font-mono text-sm tracking-widest animate-pulse">ESTABLISHING UPLINK...</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Bottom: Live Activity Console -->
-            <div class="h-48 glass-panel border-t border-slate-800/50 p-0 flex flex-col backdrop-blur-md">
-                <div class="px-4 py-2 bg-slate-900/40 border-b border-slate-800/50 flex justify-between items-center">
-                    <h3 class="text-indigo-400 font-bold text-[10px] uppercase tracking-widest flex items-center gap-2">
-                        <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Live Activity Log
-                    </h3>
-                    <span class="text-slate-600 text-[10px] font-mono">Real-time Feed</span>
+            <!-- Bottom: Logs Terminal -->
+            <div class="h-48 cyber-glass border-t border-cyber-primary/20 flex flex-col">
+                <div class="px-4 py-2 bg-cyber-black/50 border-b border-white/5 flex justify-between items-center">
+                    <div class="flex items-center gap-2 text-cyber-primary text-xs font-bold tracking-widest uppercase">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        System Event Log
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-mono">LIVE FEED</span>
                 </div>
-                <div id="miniLogs" class="flex-1 overflow-y-auto p-3 space-y-1.5 font-mono text-[11px] custom-scrollbar">
-                    <div class="text-slate-600 italic pl-2 border-l-2 border-slate-800">System ready. Waiting for market ticks...</div>
+                <div id="miniLogs" class="flex-1 overflow-y-auto p-3 font-mono text-[11px] space-y-1 custom-scrollbar bg-black/20">
+                    <div class="text-slate-600 pl-2 border-l-2 border-slate-800">System initialized. Waiting for ticks...</div>
                 </div>
             </div>
         </div>
 
-        <!-- Right: Sidebar (Positions) -->
-        <div class="w-80 glass-panel border-l border-slate-800/50 flex flex-col shadow-2xl z-20">
-            
-            <!-- Controls -->
-            <div class="p-4 border-b border-slate-800/50">
-                <h3 class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-3">Manual Override</h3>
-                <div class="flex gap-2">
-                    <button onclick="switchMode('SNIPER')" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[10px] font-bold text-slate-300 transition-all">SNIPER</button>
-                    <button onclick="switchMode('PREDATOR')" class="flex-1 py-2 bg-gradient-to-r from-red-900/40 to-red-800/40 hover:from-red-900/60 border border-red-900/30 text-red-400 rounded-lg text-[10px] font-bold transition-all shadow-[0_0_10px_rgba(220,38,38,0.1)]">PREDATOR</button>
+        <!-- Right: Sidebar -->
+        <div class="w-80 cyber-glass border-l border-cyber-primary/20 flex flex-col z-20">
+            <!-- Control Panel -->
+            <div class="p-4 border-b border-white/5">
+                <h3 class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3">Strategy Override</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="switchMode('SNIPER')" class="py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 hover:border-slate-500 rounded-sm text-xs font-bold text-slate-300 transition-all">
+                        SNIPER
+                    </button>
+                    <button onclick="switchMode('PREDATOR')" class="py-2 bg-cyber-danger/10 hover:bg-cyber-danger/20 border border-cyber-danger/30 hover:border-cyber-danger/60 rounded-sm text-xs font-bold text-cyber-danger transition-all shadow-[0_0_10px_rgba(255,0,85,0.1)]">
+                        PREDATOR
+                    </button>
                 </div>
             </div>
 
-            <!-- Active Positions -->
-            <div class="flex-1 flex flex-col overflow-hidden">
-                <div class="px-4 py-2 bg-slate-900/30 border-b border-slate-800/30 flex justify-between items-center">
-                    <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Open Positions</span>
-                    <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 rounded font-mono" id="posCount">0</span>
+            <!-- Positions Panel -->
+            <div class="flex-1 flex flex-col overflow-hidden bg-cyber-black/20">
+                <div class="px-4 py-3 border-b border-white/5 flex justify-between items-center bg-cyber-primary/5">
+                    <span class="text-[10px] uppercase tracking-wider text-cyber-primary font-bold">Active Positions</span>
+                    <span class="text-[10px] bg-cyber-primary/20 text-cyber-primary px-2 py-0.5 rounded font-mono border border-cyber-primary/20" id="posCount">0</span>
                 </div>
-                <div class="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar" id="positionsList">
-                    <!-- Positions -->
+                <div class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar" id="positionsList">
+                    <!-- Positions will be injected here -->
                 </div>
             </div>
         </div>
@@ -157,10 +204,8 @@
     <script>
         const socket = io();
         const pairsData = {};
-        // Cache DOM elements for high performance
         const domCache = {}; 
         
-        // DOM Elements
         const elBalance = document.getElementById('balance');
         const elEquity = document.getElementById('equity');
         const elMode = document.getElementById('botMode');
@@ -168,22 +213,14 @@
         const elPositions = document.getElementById('positionsList');
         const elConnection = document.getElementById('connectionStatus');
         const elLastSync = document.getElementById('lastSync');
-        let lastSyncTime = 0;
+        const elPosCount = document.getElementById('posCount');
 
-        // Socket Events
         socket.on('connect', () => {
-            elConnection.classList.replace('bg-red-500', 'bg-green-500');
-            // log('Connected to Server', 'text-green-400');
+            elConnection.className = 'w-3 h-3 bg-cyber-success rounded-full animate-pulse shadow-[0_0_10px_#00ff9d]';
         });
 
         socket.on('disconnect', () => {
-            elConnection.classList.replace('bg-green-500', 'bg-red-500');
-            // log('Disconnected from Server', 'text-red-500');
-        });
-
-        socket.on('connect_error', (err) => {
-             // Sering terjadi saat server restart, abaikan di UI agar tidak spam
-             console.log('Connection retry...');
+            elConnection.className = 'w-3 h-3 bg-cyber-danger rounded-full animate-pulse shadow-[0_0_10px_#ff0055]';
         });
 
         socket.on('init', (data) => {
@@ -191,7 +228,6 @@
             updateAccount(data.account);
             if(data.lastSync) updateSyncStatus(data.lastSync);
             
-            // HYDRATE MARKET GRID IMMEDIATELY
             if (data.market) {
                 Object.keys(data.market).forEach(pair => {
                     const item = data.market[pair];
@@ -200,17 +236,15 @@
                 });
             }
 
-            // FORCE RENDER PLACEHOLDERS FOR ALL PAIRS (Fixes "Waiting for data..." delay)
             if (data.config && data.config.pairs) {
                 data.config.pairs.forEach(pair => {
                     if (!pairsData[pair]) {
-                        // Render placeholder
                         updateCard({
                             pair: pair,
                             price: 0,
                             rsi: 0,
                             signal: 'WAIT',
-                            reason: 'Standby', // Changed from Connecting... to look "Ready"
+                            reason: 'System Standby',
                             account: null
                         });
                     }
@@ -219,25 +253,18 @@
         });
 
         socket.on('update', (data) => {
-            // Force remove spinner on first update
             const initMsg = elGrid.querySelector('.col-span-full');
             if(initMsg) initMsg.remove();
 
-            // Safety: Only update card if this is a PAIR update
             if (data.pair) {
                 updateCard(data);
-                
-                // Add to Mini Logs (Simplified)
                 if(data.signal && data.signal !== 'WAIT' && data.signal !== 'PENDING' && data.signal !== 'COOLDOWN') {
                      const pairName = data.pair.includes(':') ? data.pair.split(':')[1] : data.pair;
-                     logMini(`Signal: ${pairName} ${data.signal} @ ${data.price.toFixed(5)}`, data.signal === 'BUY' ? 'text-green-400' : 'text-red-400');
+                     logMini(`SIGNAL: ${pairName} ${data.signal} @ ${data.price.toFixed(5)}`, data.signal === 'BUY' ? 'text-cyber-success' : 'text-cyber-danger');
                 }
             }
             
-            // Account data might also be present (passed from analyzeMarket)
             if (data.account) updateAccount(data.account);
-            
-            // Sync Status Update (Fix for "LOST" status)
             if (data.lastSync) updateSyncStatus(data.lastSync);
         });
 
@@ -246,29 +273,24 @@
             if(data.lastSync) updateSyncStatus(data.lastSync);
         });
 
-        // NEW: Dedicated Balance Listener
         socket.on('balance_update', (data) => {
             if(data.balance !== undefined) elBalance.innerText = `$${parseFloat(data.balance).toFixed(2)}`;
             if(data.equity !== undefined) elEquity.innerText = `$${parseFloat(data.equity).toFixed(2)}`;
         });
 
-        socket.on('price', (data) => {
-            updatePrice(data);
-        });
+        socket.on('price', (data) => updatePrice(data));
 
         socket.on('log', (msg) => {
-            // Only critical logs to Mini Logs
             if(msg.includes('OPEN') || msg.includes('CLOSE') || msg.includes('BLOCKED')) {
-                logMini(msg, 'text-yellow-400');
+                logMini(msg, 'text-cyber-warning');
             }
         });
 
-        // Mini Log Function
-        function logMini(msg, colorClass = '') {
+        function logMini(msg, colorClass = 'text-slate-400') {
             const div = document.createElement('div');
             const time = new Date().toLocaleTimeString();
-            div.className = `border-b border-slate-800/30 pb-0.5 mb-0.5 ${colorClass}`;
-            div.innerHTML = `<span class="text-slate-600 mr-2">[${time}]</span>${msg}`;
+            div.className = `border-b border-white/5 pb-1 mb-1 ${colorClass}`;
+            div.innerHTML = `<span class="text-slate-600 mr-2 font-bold">[${time}]</span>${msg}`;
             const elMiniLogs = document.getElementById('miniLogs');
             if(elMiniLogs) {
                 elMiniLogs.prepend(div);
@@ -281,7 +303,6 @@
             if(config.balance) updateAccount({balance: config.balance});
         });
 
-        // Functions
         function switchMode(mode) {
             socket.emit('switchMode', mode);
         }
@@ -289,9 +310,9 @@
         function updateConfig(config) {
             elMode.innerText = config.mode;
             if (config.mode === 'PREDATOR') {
-                elMode.className = 'px-2 py-0.5 rounded bg-red-900 text-red-300 font-bold border border-red-700 shadow-[0_0_10px_rgba(220,38,38,0.5)]';
+                elMode.className = 'px-4 py-2 bg-cyber-danger/10 border border-cyber-danger/30 text-cyber-danger font-bold rounded-sm shadow-[0_0_15px_rgba(255,0,85,0.15)] tracking-wider';
             } else {
-                elMode.className = 'px-2 py-0.5 rounded bg-indigo-900 text-indigo-300 font-bold border border-indigo-700';
+                elMode.className = 'px-4 py-2 bg-cyber-primary/10 border border-cyber-primary/30 text-cyber-primary font-bold rounded-sm shadow-[0_0_15px_rgba(0,240,255,0.15)] tracking-wider';
             }
         }
 
@@ -299,18 +320,13 @@
             if(!acc) return;
             elBalance.innerText = `$${parseFloat(acc.balance).toFixed(2)}`;
             elEquity.innerText = `$${parseFloat(acc.equity).toFixed(2)}`;
-            
-            // Update Position Count
-            const elPosCount = document.getElementById('posCount');
-            if(elPosCount) elPosCount.innerText = acc.positions.length;
+            elPosCount.innerText = acc.positions.length;
 
-            // Render Positions
             elPositions.innerHTML = '';
             if (acc.positions.length === 0) {
                 elPositions.innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-32 text-slate-600 space-y-2">
-                        <svg class="w-8 h-8 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
-                        <span class="text-xs italic">No active positions</span>
+                    <div class="flex flex-col items-center justify-center h-32 text-slate-600 space-y-2 opacity-50">
+                        <span class="text-xs font-mono">NO ACTIVE CONTRACTS</span>
                     </div>`;
             } else {
                 acc.positions.forEach(p => {
@@ -319,25 +335,28 @@
                     const isBuy = p.type === 'BUY';
                     const isProfit = profit >= 0;
                     
-                    div.className = `p-3 rounded-lg border transition-all hover:scale-[1.02] ${isBuy ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-rose-900/10 border-rose-500/20'}`;
+                    div.className = `p-3 rounded-sm border relative overflow-hidden group transition-all hover:bg-white/5 ${isBuy ? 'bg-cyber-success/5 border-cyber-success/20' : 'bg-cyber-danger/5 border-cyber-danger/20'}`;
                     
                     div.innerHTML = `
-                        <div class="flex justify-between items-start mb-2">
+                        <div class="absolute top-0 left-0 w-1 h-full ${isBuy ? 'bg-cyber-success' : 'bg-cyber-danger'}"></div>
+                        <div class="flex justify-between items-start mb-2 pl-2">
                             <div class="flex items-center gap-2">
-                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${isBuy ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}">${p.type}</span>
-                                <span class="font-bold text-slate-200 text-sm">${p.pair.includes(':') ? p.pair.split(':')[1] : p.pair}</span>
+                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${isBuy ? 'bg-cyber-success/20 text-cyber-success' : 'bg-cyber-danger/20 text-cyber-danger'}">${p.type}</span>
+                                <span class="font-bold text-white text-sm tracking-tight">${p.pair.includes(':') ? p.pair.split(':')[1] : p.pair}</span>
                             </div>
-                            <div class="flex flex-col items-end">
-                                <span class="text-xs font-mono font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'} transition-all duration-300" id="profit-${p.ticket}">${isProfit ? '+' : ''}${profit.toFixed(2)}</span>
-                                <span class="text-[9px] text-slate-600 animate-pulse">● LIVE</span>
+                            <div class="text-right">
+                                <div class="font-mono font-bold text-sm ${isProfit ? 'text-cyber-success text-glow-green' : 'text-cyber-danger text-glow-red'} transition-all duration-300" id="profit-${p.ticket}">
+                                    ${isProfit ? '+' : ''}${profit.toFixed(5)}
+                                </div>
+                                <div class="text-[8px] text-cyber-primary animate-pulse tracking-wider">● LIVE</div>
                             </div>
                         </div>
-                        <div class="flex justify-between items-end">
-                            <div class="text-[10px] text-slate-500 font-mono space-y-0.5">
-                                <div>Lot: <span class="text-slate-300">${p.lot || '?'}</span></div>
-                                <div>@ <span class="text-slate-300">${p.openPrice || '?'}</span></div>
+                        <div class="flex justify-between items-end pl-2">
+                            <div class="text-[10px] text-slate-500 font-mono">
+                                <div><span class="text-slate-400">LOT:</span> ${p.lot || '?'}</div>
+                                <div><span class="text-slate-400">OP :</span> ${p.openPrice || '?'}</div>
                             </div>
-                            <button onclick="manualClose('${p.ticket}')" class="text-[9px] bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-2 py-1 rounded border border-slate-700 transition-colors">
+                            <button onclick="manualClose('${p.ticket}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] bg-slate-800 hover:bg-white text-slate-400 hover:text-black px-3 py-1 rounded-sm border border-slate-600 font-bold">
                                 CLOSE
                             </button>
                         </div>
@@ -348,7 +367,7 @@
         }
 
         function manualClose(ticket) {
-            if(confirm('Are you sure you want to CLOSE this position manually?')) {
+            if(confirm('CONFIRM MANUAL CLOSE?')) {
                 socket.emit('manualClose', ticket);
             }
         }
@@ -359,71 +378,66 @@
             const simplePair = pair.includes(':') ? pair.split(':')[1] : pair;
             
             if (!pairsData[pair]) {
-                // Create Card (Redesigned)
                 const card = document.createElement('div');
                 card.id = `card-${safeId}`;
-                card.className = 'card p-4 rounded-xl';
+                card.className = 'cyber-card p-4 rounded-sm';
                 card.innerHTML = `
-                    <!-- Top Row: Name & Price -->
                     <div class="flex justify-between items-start mb-4">
                         <div>
                             <div class="flex items-center gap-2">
-                                <h2 class="text-lg font-bold text-white tracking-tight">${simplePair}</h2>
-                                <span class="text-[9px] px-1.5 rounded bg-slate-700/50 text-slate-400 border border-slate-600/50">M15</span>
+                                <h2 class="text-xl font-bold text-white tracking-tight font-sans">${simplePair}</h2>
+                                <span class="text-[9px] px-1 rounded bg-white/10 text-slate-400 border border-white/10 font-mono">M15</span>
                             </div>
-                            <div class="text-[10px] text-slate-500 mt-0.5 font-mono" id="time-${safeId}">--:--:--</div>
+                            <div class="text-[10px] text-slate-500 mt-1 font-mono" id="time-${safeId}">--:--:--</div>
                         </div>
                         <div class="text-right">
-                            <div class="text-2xl font-mono font-bold text-white tracking-tighter price" id="price-${safeId}">
+                            <div class="text-2xl font-mono font-bold text-white tracking-tighter" id="price-${safeId}">
                                 ${data.price > 0 ? data.price.toFixed(5) : '<span class="text-slate-700">0.00000</span>'}
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Middle: Visual Indicators -->
                     <div class="space-y-3 mb-4">
                         <!-- Signal Badge -->
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/40 border border-slate-800">
-                            <span class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Action</span>
-                            <div class="font-bold text-xs flex items-center gap-1.5" id="signal-badge-${safeId}">
-                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-                                <span id="signal-${safeId}">WAIT</span>
+                        <div class="flex items-center justify-between p-2 rounded-sm bg-black/30 border border-white/5">
+                            <span class="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Strategy</span>
+                            <div class="font-bold text-xs flex items-center gap-2" id="signal-badge-${safeId}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                                <span id="signal-${safeId}" class="text-slate-400">SCANNING</span>
                             </div>
                         </div>
 
-                        <!-- RSI Bar -->
-                        <div>
-                            <div class="flex justify-between text-[10px] mb-1">
-                                <span class="text-slate-500 font-bold">RSI</span>
-                                <span class="font-mono text-slate-300" id="rsi-val-${safeId}">--</span>
+                        <!-- Indicators -->
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-black/20 p-2 rounded-sm border border-white/5">
+                                <div class="flex justify-between text-[9px] mb-1">
+                                    <span class="text-slate-500 font-bold">RSI</span>
+                                    <span class="font-mono text-white" id="rsi-val-${safeId}">--</span>
+                                </div>
+                                <div class="h-1 bg-white/10 rounded-full overflow-hidden">
+                                    <div class="h-full bg-cyber-secondary w-0 transition-all duration-500" id="rsi-bar-${safeId}"></div>
+                                </div>
                             </div>
-                            <div class="rsi-bar-bg relative">
-                                <div class="absolute left-[30%] top-0 bottom-0 w-px bg-slate-600/30 z-10"></div>
-                                <div class="absolute left-[70%] top-0 bottom-0 w-px bg-slate-600/30 z-10"></div>
-                                <div class="rsi-bar-fill bg-slate-500 w-0" id="rsi-bar-${safeId}"></div>
+                            <div class="bg-black/20 p-2 rounded-sm border border-white/5">
+                                <div class="flex justify-between text-[9px] mb-1">
+                                    <span class="text-slate-500 font-bold">TP</span>
+                                    <span class="font-mono text-cyber-primary" id="tp-${safeId}">-</span>
+                                </div>
+                                <div class="text-[9px] text-slate-500 truncate" id="vsl-${safeId}">VSL: -</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Bottom: Reason & Stats -->
-                    <div class="pt-3 border-t border-slate-700/30">
-                        <div class="text-[10px] text-slate-400 truncate leading-relaxed" id="reason-${safeId}">
-                            Initializing analysis...
-                        </div>
-                        <div class="flex justify-between mt-2 text-[9px] font-mono text-slate-500">
-                            <span id="vsl-${safeId}">VSL: -</span>
-                            <span id="tp-${safeId}">TP: -</span>
+                    <div class="pt-3 border-t border-white/5">
+                        <div class="text-[10px] text-slate-400 truncate font-mono opacity-70" id="reason-${safeId}">
+                            Initializing neural link...
                         </div>
                     </div>
                 `;
                 
-                const initMsg = elGrid.querySelector('.text-center');
-                if(initMsg) initMsg.parentElement.remove(); // Remove spinner container
-
                 elGrid.appendChild(card);
                 pairsData[pair] = true;
 
-                // Cache elements
                 domCache[pair] = {
                     card: card,
                     price: document.getElementById(`price-${safeId}`),
@@ -438,81 +452,67 @@
                 };
             }
 
-            // Use Cache
             const els = domCache[pair];
             if(!els) return;
 
-            // Update RSI Visuals
             const rsi = data.rsi;
             els.rsiVal.innerText = rsi.toFixed(1);
             els.rsiBar.style.width = `${Math.min(Math.max(rsi, 0), 100)}%`;
             
-            // RSI Color Logic
             let rsiColor = 'bg-slate-500';
-            if (rsi > 70) rsiColor = 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]';
-            else if (rsi < 30) rsiColor = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
-            else if (rsi > 55) rsiColor = 'bg-rose-400/50';
-            else if (rsi < 45) rsiColor = 'bg-emerald-400/50';
+            if (rsi > 70) rsiColor = 'bg-cyber-danger shadow-[0_0_8px_#ff0055]';
+            else if (rsi < 30) rsiColor = 'bg-cyber-success shadow-[0_0_8px_#00ff9d]';
+            else if (rsi > 55) rsiColor = 'bg-cyber-danger/50';
+            else if (rsi < 45) rsiColor = 'bg-cyber-success/50';
             
-            els.rsiBar.className = `rsi-bar-fill ${rsiColor}`;
+            els.rsiBar.className = `h-full transition-all duration-500 ${rsiColor}`;
 
-            // Update Signal Badge
             if (data.signal === 'BUY') {
-                els.signal.innerText = 'STRONG BUY';
-                els.signal.className = 'text-emerald-400';
-                els.signalBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> <span class="text-emerald-400">BUY</span>`;
-                els.card.style.borderColor = 'rgba(16, 185, 129, 0.3)';
-                els.card.style.background = 'rgba(6, 78, 59, 0.2)';
+                els.signal.innerText = 'LONG ENTRY';
+                els.signal.className = 'text-cyber-success text-glow-green tracking-wider';
+                els.signalBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-cyber-success animate-pulse shadow-[0_0_5px_#00ff9d]"></span> <span class="text-cyber-success tracking-wider">BUY</span>`;
+                els.card.style.borderColor = 'rgba(0, 255, 157, 0.4)';
+                els.card.style.boxShadow = '0 0 20px rgba(0, 255, 157, 0.1)';
             } else if (data.signal === 'SELL') {
-                els.signal.innerText = 'STRONG SELL';
-                els.signal.className = 'text-rose-400';
-                els.signalBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> <span class="text-rose-400">SELL</span>`;
-                els.card.style.borderColor = 'rgba(244, 63, 94, 0.3)';
-                els.card.style.background = 'rgba(136, 19, 55, 0.2)';
+                els.signal.innerText = 'SHORT ENTRY';
+                els.signal.className = 'text-cyber-danger text-glow-red tracking-wider';
+                els.signalBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-cyber-danger animate-pulse shadow-[0_0_5px_#ff0055]"></span> <span class="text-cyber-danger tracking-wider">SELL</span>`;
+                els.card.style.borderColor = 'rgba(255, 0, 85, 0.4)';
+                els.card.style.boxShadow = '0 0 20px rgba(255, 0, 85, 0.1)';
             } else {
                 els.signal.innerText = 'WAIT';
-                els.signal.className = 'text-slate-400';
+                els.signal.className = 'text-slate-500';
                 els.signalBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> <span class="text-slate-500">WAIT</span>`;
-                els.card.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                els.card.style.background = 'rgba(30, 41, 59, 0.4)';
+                els.card.style.borderColor = '';
+                els.card.style.boxShadow = '';
             }
 
-            // Reason
-            els.reason.innerText = data.reason || 'Analyzing market structure...';
-            if (data.reason && data.reason.includes('Wait')) els.reason.className = 'text-[10px] text-slate-500 truncate';
-            else els.reason.className = 'text-[10px] text-slate-300 truncate';
+            els.reason.innerText = data.reason || 'Scanning market structure...';
+            els.reason.className = (data.reason && data.reason.includes('Wait')) ? 'text-[10px] text-slate-500 truncate font-mono' : 'text-[10px] text-cyber-primary/70 truncate font-mono';
 
-            // Levels
             if (els.vsl) els.vsl.innerText = (typeof data.virtualSL === 'number') ? `VSL: ${data.virtualSL.toFixed(5)}` : 'VSL: -';
-            if (els.tp) els.tp.innerText = (typeof data.tp === 'number' && data.tp > 0) ? `TP: ${data.tp.toFixed(5)}` : 'TP: -';
+            if (els.tp) els.tp.innerText = (typeof data.tp === 'number' && data.tp > 0) ? `${data.tp.toFixed(5)}` : '-';
         }
 
         function updatePrice(data) {
             const pair = data.pair;
             const els = domCache[pair];
-            
-            // If cache miss (card not created yet), ignore or try to find
             if(!els) return;
 
             const oldPrice = parseFloat(els.price.innerText) || 0;
             const newPrice = data.price;
             
-            // Throttle UI Updates REMOVED for Real-Time Speed
-            // const now = Date.now();
-            // if(els.card.lastUpdate && now - els.card.lastUpdate < 100) return;
-            // els.card.lastUpdate = now;
-
             els.price.innerText = newPrice.toFixed(5);
-            els.price.className = `text-xl font-mono font-bold price ${newPrice > oldPrice ? 'value-up' : newPrice < oldPrice ? 'value-down' : 'text-white'}`;
+            
+            if (newPrice > oldPrice) {
+                els.price.className = 'text-2xl font-mono font-bold text-cyber-success text-glow-green tracking-tighter transition-colors duration-300';
+                setTimeout(() => els.price.className = 'text-2xl font-mono font-bold text-white tracking-tighter transition-colors duration-1000', 300);
+            } else if (newPrice < oldPrice) {
+                els.price.className = 'text-2xl font-mono font-bold text-cyber-danger text-glow-red tracking-tighter transition-colors duration-300';
+                setTimeout(() => els.price.className = 'text-2xl font-mono font-bold text-white tracking-tighter transition-colors duration-1000', 300);
+            }
+            
             els.time.innerText = data.time;
-        }
-
-        function log(msg, colorClass = '') {
-            // Logs disabled for performance
-        }
-
-        function clearLogs() {
-            // Logs disabled
         }
 
         function updateSyncStatus(timestamp) {
@@ -520,18 +520,17 @@
             const diff = Math.floor((Date.now() - timestamp) / 1000);
             
             if (diff < 5) {
-                elLastSync.innerText = `Sync: OK (${diff}s)`;
-                elLastSync.className = 'text-[10px] text-green-400 font-mono mt-1 font-bold';
+                elLastSync.innerText = `LINK ESTABLISHED (${diff}s)`;
+                elLastSync.className = 'text-[10px] font-mono font-bold text-cyber-success animate-pulse';
             } else if (diff < 15) {
-                elLastSync.innerText = `Sync: SLOW (${diff}s)`;
-                elLastSync.className = 'text-[10px] text-yellow-400 font-mono mt-1 font-bold';
+                elLastSync.innerText = `LINK UNSTABLE (${diff}s)`;
+                elLastSync.className = 'text-[10px] font-mono font-bold text-cyber-warning';
             } else {
-                elLastSync.innerText = `Sync: LOST (${diff}s)`;
-                elLastSync.className = 'text-[10px] text-red-500 font-mono mt-1 font-bold';
+                elLastSync.innerText = `CONNECTION LOST (${diff}s)`;
+                elLastSync.className = 'text-[10px] font-mono font-bold text-cyber-danger animate-bounce';
             }
         }
 
-        // Update sync timer every second UI side
         setInterval(() => {
             if(lastSyncTime > 0) updateSyncStatus(lastSyncTime);
         }, 1000);
