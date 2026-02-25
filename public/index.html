@@ -392,7 +392,7 @@
                         </div>
                         <div class="text-right">
                             <div class="text-2xl font-mono font-bold text-white tracking-tighter" id="price-${safeId}">
-                                ${data.price > 0 ? data.price.toFixed(5) : '<span class="text-slate-700">0.00000</span>'}
+                                ${data.price > 0 ? data.price.toFixed(getDigits(pair)) : '<span class="text-slate-700">0.00</span>'}
                             </div>
                         </div>
                     </div>
@@ -454,6 +454,7 @@
 
             const els = domCache[pair];
             if(!els) return;
+            const digits = getDigits(pair);
 
             const rsi = data.rsi;
             els.rsiVal.innerText = rsi.toFixed(1);
@@ -490,8 +491,16 @@
             els.reason.innerText = data.reason || 'Scanning market structure...';
             els.reason.className = (data.reason && data.reason.includes('Wait')) ? 'text-[10px] text-slate-500 truncate font-mono' : 'text-[10px] text-cyber-primary/70 truncate font-mono';
 
-            if (els.vsl) els.vsl.innerText = (typeof data.virtualSL === 'number') ? `VSL: ${data.virtualSL.toFixed(5)}` : 'VSL: -';
-            if (els.tp) els.tp.innerText = (typeof data.tp === 'number' && data.tp > 0) ? `${data.tp.toFixed(5)}` : '-';
+            if (els.vsl) els.vsl.innerText = (typeof data.virtualSL === 'number') ? `VSL: ${data.virtualSL.toFixed(digits)}` : 'VSL: -';
+            if (els.tp) els.tp.innerText = (typeof data.tp === 'number' && data.tp > 0) ? `${data.tp.toFixed(digits)}` : '-';
+        }
+
+        function getDigits(pair) {
+            if (!pair) return 5;
+            const p = pair.toUpperCase();
+            if (p.includes('JPY')) return 3;
+            if (p.includes('XAU') || p.includes('BTC') || p.includes('ETH') || p.includes('US30') || p.includes('NAS100')) return 2;
+            return 5;
         }
 
         function updatePrice(data) {
@@ -501,8 +510,9 @@
 
             const oldPrice = parseFloat(els.price.innerText) || 0;
             const newPrice = data.price;
+            const digits = getDigits(pair);
             
-            els.price.innerText = newPrice.toFixed(5);
+            els.price.innerText = newPrice.toFixed(digits);
             
             if (newPrice > oldPrice) {
                 els.price.className = 'text-2xl font-mono font-bold text-cyber-success text-glow-green tracking-tighter transition-colors duration-300';
