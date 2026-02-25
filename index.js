@@ -1033,17 +1033,22 @@ function analyzeMarket(pair, periods, scalpPeriods) {
         // MOMENTUM INJECTION (Smart Money Mode)
         // If Price is breaking bands + Big Candle -> FORCE ENTRY
         // We bypass RSI Overbought/Oversold because Smart Money pushes RSI to extremes.
+        // GUARD: Unless RSI is already EXTREME (e.g. > 80), then it's too late.
         
         const isBullishCandle = currentPrice > currentCandle.open;
         const isBearishCandle = currentPrice < currentCandle.open;
         
         if (isBullishCandle && currentPrice > curBB.upper) {
-             signal = 'BUY';
-             reason = `SMART MONEY: Momentum Breakout (Range ${candleRange.toFixed(5)})`;
+             if (curRSI < 75) { // GUARD: Don't chase if RSI > 75
+                 signal = 'BUY';
+                 reason = `SMART MONEY: Momentum Breakout (Range ${candleRange.toFixed(5)})`;
+             }
              // Boost ATR for SL/TP because volatility is high
         } else if (isBearishCandle && currentPrice < curBB.lower) {
-             signal = 'SELL';
-             reason = `SMART MONEY: Momentum Breakout (Range ${candleRange.toFixed(5)})`;
+             if (curRSI > 25) { // GUARD: Don't chase if RSI < 25
+                 signal = 'SELL';
+                 reason = `SMART MONEY: Momentum Breakout (Range ${candleRange.toFixed(5)})`;
+             }
         }
     } else {
         // Standard Volatility Guard (Logic Below)
@@ -1059,7 +1064,7 @@ function analyzeMarket(pair, periods, scalpPeriods) {
     const isUptrend = currentPrice > curEMA;
     const isDowntrend = currentPrice < curEMA;
     const trendStrength = curADX ? curADX.adx : 0;
-    const isStrongTrend = trendStrength > 25; // ADX > 25 indicates strong trend
+    const isStrongTrend = trendStrength > 30; // STRENGTHENED: ADX > 30 (Was 25)
 
     // MACD Confirmation
     const isMacdBullish = curMACD && curMACD.histogram > 0;
@@ -1068,8 +1073,8 @@ function analyzeMarket(pair, periods, scalpPeriods) {
     // RSI Pullback Logic (Buying the dip in uptrend)
     // Aggressive: RSI < 50 in Uptrend
     // Conservative: RSI < 40 in Uptrend
-    const rsiBuyZone = 45; 
-    const rsiSellZone = 55;
+    const rsiBuyZone = 40; // TIGHTENED: Was 45
+    const rsiSellZone = 60; // TIGHTENED: Was 55
 
     // SIGNAL GENERATION
     if (isStrongTrend) {
