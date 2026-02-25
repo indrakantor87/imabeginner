@@ -556,12 +556,12 @@ app.post('/api/update_balance', (req, res) => {
                 account.positions.push({
                     ticket: mt5Pos.ticket,
                     pair: pair,
-                    type: mt5Pos.type === 0 ? 'BUY' : 'SELL', // 0=BUY, 1=SELL usually
+                    type: (mt5Pos.type === 'BUY' || mt5Pos.type === 0) ? 'BUY' : 'SELL',
                     mode: mode,
-                    openPrice: openPrice,
-                    lot: parseFloat(mt5Pos.volume),
-                    profit: parseFloat(mt5Pos.profit),
-                    sl: CONFIG.useVirtualSL ? virtualSL : parseFloat(mt5Pos.sl || 0),
+                    openPrice: parseFloat(mt5Pos.openPrice || mt5Pos.open_price || 0),
+                    lot: parseFloat(mt5Pos.lot || mt5Pos.volume || 0),
+                    profit: parseFloat(mt5Pos.profit || 0),
+                    sl: parseFloat(mt5Pos.sl || 0),
                     tp: parseFloat(mt5Pos.tp || 0)
                 });
             }

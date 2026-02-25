@@ -353,8 +353,8 @@
                         </div>
                         <div class="flex justify-between items-end pl-2">
                             <div class="text-[10px] text-slate-500 font-mono">
-                                <div><span class="text-slate-400">LOT:</span> ${p.lot || '?'}</div>
-                                <div><span class="text-slate-400">OP :</span> ${p.openPrice || '?'}</div>
+                                <div><span class="text-slate-400">LOT:</span> ${p.lot !== undefined ? p.lot.toFixed(2) : '?'}</div>
+                                <div><span class="text-slate-400">OP :</span> ${p.openPrice !== undefined ? p.openPrice.toFixed(getDigits(p.pair)) : '?'}</div>
                             </div>
                             <button onclick="manualClose('${p.ticket}')" class="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] bg-slate-800 hover:bg-white text-slate-400 hover:text-black px-3 py-1 rounded-sm border border-slate-600 font-bold">
                                 CLOSE
